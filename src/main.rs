@@ -18,6 +18,7 @@ mod parse {
         NoVowels,
     }
 
+    #[inline(always)]
     pub fn consume_until(
         input: &[u8],
         stop_byte1: u8,
@@ -56,6 +57,7 @@ mod parse {
         }
     }
 
+    #[inline(always)]
     pub fn word<'a>(input: &'a [u8]) -> Option<(&'a [u8], State, &'a [u8], bool)> {
         consume_until(input, b' ', b'\n')
     }
