@@ -63,7 +63,7 @@ mod parse {
 }
 
 use parse::Error;
-use std::io::{stdin, stdout, BufWriter, Read, Write};
+use std::io::{stdin, stdout, Read, Write};
 
 fn main() -> Result<(), Error> {
     use parse::State::*;
@@ -72,30 +72,32 @@ fn main() -> Result<(), Error> {
         stdin().read_to_end(&mut b)?;
         b
     };
-    let mut writer = BufWriter::with_capacity(128 * 1024, stdout());
+    let mut obuf = Vec::with_capacity((buf.len() * 3) / 2);
 
     let mut cursor = buf.as_slice();
     while let Some((w, wi, ncursor, newline)) = parse::word(cursor) {
         cursor = ncursor;
         match wi {
             BeginsWithVowel => {
-                writer.write(w)?;
-                writer.write(b"yay")?
+                obuf.extend_from_slice(w);
+                obuf.extend_from_slice(b"yay");
             }
             VowelInWord(at) => {
                 let before_vowel = &w[..at];
                 let remainder = &w[at..];
-                writer.write(remainder)?;
-                writer.write(before_vowel)?;
-                writer.write(b"ay")?
+                obuf.extend_from_slice(remainder);
+                obuf.extend_from_slice(before_vowel);
+                obuf.extend_from_slice(b"ay");
             }
-            NoVowels => writer.write(w)?,
+            NoVowels => obuf.extend_from_slice(w),
         };
+
         if newline {
-            writeln!(writer)?;
+            obuf.push(b'\n');
         } else {
-            write!(writer, " ")?;
+            obuf.push(b' ');
         }
     }
+    stdout().write_all(&obuf)?;
     Ok(())
 }
