@@ -13,36 +13,51 @@ mod parse {
         }
     }
 
-    pub fn consume_until(input: &[u8], stop_byte: u8) -> Result<(&[u8], &[u8]), Error> {
+    pub fn consume_until(
+        input: &[u8],
+        stop_byte1: u8,
+        stop_byte2: u8,
+    ) -> Result<(&[u8], &[u8], bool), Error> {
+        let mut byte2_stopped = false;
         let (input, remainder) = input.split_at(input
             .iter()
-            .position(|b| *b == stop_byte)
+            .position(|b| {
+                if *b == stop_byte1 {
+                    true
+                } else if *b == stop_byte2 {
+                    byte2_stopped = true;
+                    true
+                } else {
+                    false
+                }
+            })
             .ok_or(Error::Exhausted)?);
 
-        Ok((input, &remainder[1..]))
+        Ok((input, &remainder[1..], byte2_stopped))
     }
 
-    pub fn names<'a>(input: &'a [u8], mut cb: impl FnMut(&'a [u8])) -> Result<(), Error> {
-        let mut cursor = input;
-        loop {
-            let (name, ncursor) = consume_until(cursor, b'\n')?;
-            match name.get(0) {
-                Some(c) if *c == b'*' => return Ok(()),
-                None => return Err(Error::Exhausted),
-                _ => cb(name),
-            }
-            cursor = ncursor;
-        }
+    pub fn word<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8], bool)> {
+        consume_until(input, b' ', b'\n').ok()
     }
 }
 
 use parse::Error;
-use std::io::{stdin, Read};
+use std::io::{stdin, stdout, BufWriter, Read};
 use std::collections::HashMap;
 use std::str;
 
 fn main() -> Result<(), Error> {
-    let mut buf = Vec::with_capacity(1024 * 1024);
-    stdin().read_to_end(&mut buf)?;
+    let buf = {
+        let mut b = Vec::with_capacity(1024 * 1024);
+        stdin().read_to_end(&mut b)?;
+        b
+    };
+    let mut writer = BufWriter::with_capacity(128 * 1024, stdout());
+
+    let mut cursor = buf.as_slice();
+    while let Some((w, ncursor, newline)) = parse::word(cursor) {
+        cursor = ncursor;
+        eprintln!("{}", str::from_utf8(w).unwrap());
+    }
     Ok(())
 }
