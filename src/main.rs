@@ -13,14 +13,35 @@ mod parse {
         }
     }
 
+    pub enum State {
+        BeginsWithVowel,
+        VowelInWord(usize),
+        NoVowels,
+    }
+
     pub fn consume_until(
         input: &[u8],
         stop_byte1: u8,
         stop_byte2: u8,
-    ) -> Result<(&[u8], &[u8], bool), Error> {
+    ) -> Result<(&[u8], State, &[u8], bool), Error> {
+        use self::State::*;
         let mut byte2_stopped = false;
+        let mut state = NoVowels;
         let (input, remainder) = input.split_at(input
             .iter()
+            .enumerate()
+            .inspect(|&(idx, b)| {
+                if let NoVowels = state {
+                    match b {
+                        b'a' | b'e' | b'i' | b'o' | b'u' | b'y' if idx == 0 => {
+                            state = BeginsWithVowel
+                        }
+                        b'a' | b'e' | b'i' | b'o' | b'u' | b'y' => state = VowelInWord(idx),
+                        _ => {}
+                    }
+                }
+            })
+            .map(|(_, b)| b)
             .position(|b| {
                 if *b == stop_byte1 {
                     true
@@ -33,20 +54,20 @@ mod parse {
             })
             .ok_or(Error::Exhausted)?);
 
-        Ok((input, &remainder[1..], byte2_stopped))
+        Ok((input, state, &remainder[1..], byte2_stopped))
     }
 
-    pub fn word<'a>(input: &'a [u8]) -> Option<(&'a [u8], &'a [u8], bool)> {
+    pub fn word<'a>(input: &'a [u8]) -> Option<(&'a [u8], State, &'a [u8], bool)> {
         consume_until(input, b' ', b'\n').ok()
     }
 }
 
 use parse::Error;
-use std::io::{stdin, stdout, BufWriter, Read};
-use std::collections::HashMap;
+use std::io::{stdin, stdout, BufWriter, Read, Write};
 use std::str;
 
 fn main() -> Result<(), Error> {
+    use parse::State::*;
     let buf = {
         let mut b = Vec::with_capacity(1024 * 1024);
         stdin().read_to_end(&mut b)?;
@@ -55,9 +76,27 @@ fn main() -> Result<(), Error> {
     let mut writer = BufWriter::with_capacity(128 * 1024, stdout());
 
     let mut cursor = buf.as_slice();
-    while let Some((w, ncursor, newline)) = parse::word(cursor) {
+    while let Some((w, wi, ncursor, newline)) = parse::word(cursor) {
         cursor = ncursor;
-        eprintln!("{}", str::from_utf8(w).unwrap());
+        match wi {
+            BeginsWithVowel => write!(writer, "{}yay", unsafe { str::from_utf8_unchecked(w) })?,
+            VowelInWord(at) => {
+                let before_vowel = &w[..at];
+                let remainder = &w[at..];
+                write!(
+                    writer,
+                    "{}{}ay",
+                    unsafe { str::from_utf8_unchecked(remainder) },
+                    unsafe { str::from_utf8_unchecked(before_vowel) }
+                )?
+            }
+            NoVowels => write!(writer, "{}", unsafe { str::from_utf8_unchecked(w) })?,
+        }
+        if newline {
+            writeln!(writer)?;
+        } else {
+            write!(writer, " ")?;
+        }
     }
     Ok(())
 }
