@@ -3,7 +3,6 @@ mod parse {
 
     #[derive(Debug)]
     pub enum Error {
-        Exhausted,
         Io(io::Error),
     }
 
@@ -23,42 +22,42 @@ mod parse {
         input: &[u8],
         stop_byte1: u8,
         stop_byte2: u8,
-    ) -> Result<(&[u8], State, &[u8], bool), Error> {
+    ) -> Option<(&[u8], State, &[u8], bool)> {
         use self::State::*;
         let mut byte2_stopped = false;
         let mut state = NoVowels;
-        let (input, remainder) = input.split_at(input
-            .iter()
-            .enumerate()
-            .inspect(|&(idx, b)| {
-                if let NoVowels = state {
-                    match b {
-                        b'a' | b'e' | b'i' | b'o' | b'u' | b'y' if idx == 0 => {
-                            state = BeginsWithVowel
-                        }
-                        b'a' | b'e' | b'i' | b'o' | b'u' | b'y' => state = VowelInWord(idx),
-                        _ => {}
-                    }
+        let mut split_at = 0;
+        for (idx, b) in input.iter().enumerate() {
+            if *b == stop_byte1 {
+                split_at = idx;
+                break;
+            } else if *b == stop_byte2 {
+                split_at = idx;
+                byte2_stopped = true;
+                break;
+            }
+            if let NoVowels = state {
+                match b {
+                    b'a' | b'e' | b'i' | b'o' | b'u' | b'y' if idx == 0 => state = BeginsWithVowel,
+                    b'a' | b'e' | b'i' | b'o' | b'u' | b'y' => state = VowelInWord(idx),
+                    _ => {}
                 }
-            })
-            .map(|(_, b)| b)
-            .position(|b| {
-                if *b == stop_byte1 {
-                    true
-                } else if *b == stop_byte2 {
-                    byte2_stopped = true;
-                    true
-                } else {
-                    false
-                }
-            })
-            .ok_or(Error::Exhausted)?);
-
-        Ok((input, state, &remainder[1..], byte2_stopped))
+            }
+        }
+        if split_at == 0 {
+            None
+        } else {
+            Some((
+                &input[..split_at],
+                state,
+                &input[split_at + 1..],
+                byte2_stopped,
+            ))
+        }
     }
 
     pub fn word<'a>(input: &'a [u8]) -> Option<(&'a [u8], State, &'a [u8], bool)> {
-        consume_until(input, b' ', b'\n').ok()
+        consume_until(input, b' ', b'\n')
     }
 }
 
