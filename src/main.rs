@@ -64,7 +64,6 @@ mod parse {
 
 use parse::Error;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
-use std::str;
 
 fn main() -> Result<(), Error> {
     use parse::State::*;
@@ -79,19 +78,19 @@ fn main() -> Result<(), Error> {
     while let Some((w, wi, ncursor, newline)) = parse::word(cursor) {
         cursor = ncursor;
         match wi {
-            BeginsWithVowel => write!(writer, "{}yay", unsafe { str::from_utf8_unchecked(w) })?,
+            BeginsWithVowel => {
+                writer.write(w)?;
+                writer.write(b"yay")?
+            }
             VowelInWord(at) => {
                 let before_vowel = &w[..at];
                 let remainder = &w[at..];
-                write!(
-                    writer,
-                    "{}{}ay",
-                    unsafe { str::from_utf8_unchecked(remainder) },
-                    unsafe { str::from_utf8_unchecked(before_vowel) }
-                )?
+                writer.write(remainder)?;
+                writer.write(before_vowel)?;
+                writer.write(b"ay")?
             }
-            NoVowels => write!(writer, "{}", unsafe { str::from_utf8_unchecked(w) })?,
-        }
+            NoVowels => writer.write(w)?,
+        };
         if newline {
             writeln!(writer)?;
         } else {
